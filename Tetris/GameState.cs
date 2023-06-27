@@ -1,0 +1,268 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Media;
+
+namespace Tetris
+{
+    public class GameState
+    {
+        private Block currentBlock;
+
+        public Block CurrentBlock
+        {
+            get => currentBlock;
+            private set
+            {
+                currentBlock = value;
+                currentBlock.Reset();
+
+                currentBlock.Move(1, 0);
+
+                if (!BlockFits())
+                {
+                    currentBlock.Move(-1, 0);
+                }
+            }
+        }
+
+        public GameGrid GameGrid { get; }
+        public BlockQueue BlockQueue { get; }
+        public bool GameOver { get; private set; }
+        public int Score { get; private set; }
+        public Block HeldBlock { get; private set; }
+        public bool CanHold { get; private set; }
+
+        public GameState()
+        {
+            GameGrid = new GameGrid(22, 10);
+            BlockQueue = new BlockQueue();
+            CurrentBlock = BlockQueue.GetAndUpdate();
+            CanHold = true;
+        }
+
+        private MediaPlayer mediaClear;
+        private MediaPlayer mediaMove;
+        private MediaPlayer mediaRotate;
+        private MediaPlayer mediaPlace;
+        private MediaPlayer mediaHardDrop;
+        private MediaPlayer mediaHold;
+
+        private bool BlockFits()
+        {
+            foreach (Position p in CurrentBlock.TilePositions())
+            {
+                if (!GameGrid.IsEmpty(p.Row, p.Column))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public void HoldBlock()
+        {
+            if (!CanHold) { return; }
+            if (HeldBlock == null)
+            {
+                HeldBlock = CurrentBlock;
+                CurrentBlock = BlockQueue.GetAndUpdate();
+            }
+            else
+            {
+                Block tmp = CurrentBlock;
+                CurrentBlock = HeldBlock;
+                HeldBlock = tmp;
+            }
+
+            string filePathHold = @"Sounds\se_game_hold.wav";
+            mediaHold = new MediaPlayer();
+            mediaHold.Open(new Uri(filePathHold, UriKind.Relative));
+            mediaHold.Play();
+
+            CanHold = false;
+        }
+
+        public void RotateBlockCW()
+        {
+            CurrentBlock.RotateCW();
+
+            if (!BlockFits())
+            {
+                CurrentBlock.RotateCCW();
+            }
+            else
+            {
+                string filePathRotate = @"Sounds\se_game_rotate.wav";
+                mediaRotate = new MediaPlayer();
+                mediaRotate.Open(new Uri(filePathRotate, UriKind.Relative));
+                mediaRotate.Volume = 0.3;
+                mediaRotate.Play();
+            }
+        }
+
+        public void RotateBlockCCW()
+        {
+            CurrentBlock.RotateCCW();
+
+            if (!BlockFits())
+            {
+                CurrentBlock.RotateCW();
+            }
+            else
+            {
+                string filePathRotate = @"Sounds\se_game_rotate.wav";
+                mediaRotate = new MediaPlayer();
+                mediaRotate.Open(new Uri(filePathRotate, UriKind.Relative));
+                mediaRotate.Volume = 0.3;
+                mediaRotate.Play();
+            }
+        }
+
+        public void MoveBlockLeft()
+        {
+            CurrentBlock.Move(0, -1);
+
+            if (!BlockFits())
+            {
+                CurrentBlock.Move(0, 1);
+            }
+            else
+            {
+                string filePathMove = @"Sounds\se_game_move.wav";
+                mediaMove = new MediaPlayer();
+                mediaMove.Open(new Uri(filePathMove, UriKind.Relative));
+                mediaMove.Play();
+            }
+        }
+
+        public void MoveBlockRight()
+        {
+            CurrentBlock.Move(0, 1);
+
+            if (!BlockFits())
+            {
+                CurrentBlock.Move(0, -1);
+            }
+            else
+            {
+                string filePathMove = @"Sounds\se_game_move.wav";
+                mediaMove = new MediaPlayer();
+                mediaMove.Open(new Uri(filePathMove, UriKind.Relative));
+                mediaMove.Play();
+            }
+        }
+
+        private bool IsGameOver()
+        {
+            return !(GameGrid.IsRowEmpty(0) && GameGrid.IsRowEmpty(1));
+        }
+
+
+        private void PlaceBlock()
+        {
+            foreach (Position p in CurrentBlock.TilePositions())
+            {
+                GameGrid[p.Row, p.Column] = CurrentBlock.Id;
+            }
+
+            string filePathMove = @"Sounds\se_game_softdrop.wav";
+            mediaPlace = new MediaPlayer();
+            mediaPlace.Open(new Uri(filePathMove, UriKind.Relative));
+            mediaPlace.Play();
+
+            int cleared = GameGrid.ClearFullRows();
+            Score += cleared * 50;
+            if (cleared > 0)
+            {
+                if (cleared == 1)
+                {
+                    string filePath = @"Sounds\se_game_single.wav";
+                    mediaClear = new MediaPlayer();
+                    mediaClear.Open(new Uri(filePath, UriKind.Relative));
+                    mediaClear.Play();
+                }
+                else if (cleared == 2)
+                {
+                    string filePath = @"Sounds\se_game_double.wav";
+                    mediaClear = new MediaPlayer();
+                    mediaClear.Open(new Uri(filePath, UriKind.Relative));
+                    mediaClear.Play();
+                }
+                else if (cleared == 3)
+                {
+                    string filePath = @"Sounds\se_game_triple.wav";
+                    mediaClear = new MediaPlayer();
+                    mediaClear.Open(new Uri(filePath, UriKind.Relative));
+                    mediaClear.Play();
+                }
+                else
+                {
+                    string filePath = @"Sounds\se_game_quad.wav";
+                    mediaClear = new MediaPlayer();
+                    mediaClear.Open(new Uri(filePath, UriKind.Relative));
+                    mediaClear.Play();
+                }
+            }
+
+            if (IsGameOver())
+            {
+                GameOver = true;
+            }
+            else
+            {
+                CurrentBlock = BlockQueue.GetAndUpdate();
+                CanHold = true;
+            }
+        }
+
+        public void MoveBlockDown()
+        {
+            CurrentBlock.Move(1, 0);
+            if (!BlockFits())
+            {
+                CurrentBlock.Move(-1, 0);
+                PlaceBlock();
+            }
+        }
+
+        private int TileDropDistance(Position p)
+        {
+            int drop = 0;
+            
+            while (GameGrid.IsEmpty(p.Row + drop + 1, p.Column))
+            {
+                drop++;
+            }
+
+            return drop;
+        }
+
+        public int BlockDropDistance()
+        {
+            int drop = GameGrid.Rows;
+
+            foreach (Position p in CurrentBlock.TilePositions())
+            {
+                drop = System.Math.Min(drop, TileDropDistance(p));
+            }
+
+            return drop;
+        }
+
+        public void DropBlock()
+        {
+            CurrentBlock.Move(BlockDropDistance(), 0);
+            PlaceBlock();
+
+            string filePathHardDrop = @"Sounds\se_game_harddrop.wav";
+            mediaHardDrop = new MediaPlayer();
+            mediaHardDrop.Open(new Uri(filePathHardDrop, UriKind.Relative));
+            mediaHardDrop.Volume = 0.3;
+            mediaHardDrop.Play();
+        }
+    }
+}
